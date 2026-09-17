@@ -319,8 +319,14 @@ operations for the list.
 - `engine/filters`.
 
 Each entry is a string and MAY use Rime's `<component_type>@<component_name>` expression. A consumer presents and
-tracks the four lists independently. Changing or restoring one list MUST NOT rewrite or restore another list. Restoring
-a list removes its exact override and its `+`, `-`, and ordered `@...` patch operations.
+tracks the four lists independently. If one of the four paths is absent from the effective configuration, the consumer
+MUST represent that component list as an empty list. Loading an absent list MUST NOT create a customization. If the
+user leaves it unchanged, the consumer MUST NOT write it merely to materialize the empty list; editing it writes the
+complete list.
+
+Changing or restoring one list MUST NOT rewrite or restore another list. Restoring a list removes its exact override
+and its `+`, `-`, and ordered `@...` patch operations. If the schema still omits the path after restore, the list is
+again represented as empty.
 
 ## 7. Common field properties
 
