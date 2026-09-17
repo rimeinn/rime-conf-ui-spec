@@ -29,6 +29,8 @@ requirements.
 - **producer**: software or a person that creates a manifest;
 - **consumer**: software that parses a manifest and presents configuration controls;
 - **host**: the application containing the consumer and performing Rime configuration I/O;
+- **user data directory**: the host-provided Rime directory containing user-owned data and customizations;
+- **shared data directory**: the host-provided Rime directory containing shared or distribution-owned data;
 - **effective configuration**: the schema configuration after Rime has applied defaults and user customizations;
 - **field path**: a slash-separated path in the effective Rime configuration;
 - **restore**: removal of the user-owned override and related patch operations so that the schema value becomes
@@ -105,6 +107,7 @@ consumer creates one implicit group with the identifier `general`; its displayed
 | `min` | numeric fields only | Inclusive minimum. |
 | `max` | numeric fields only | Inclusive maximum. |
 | `options` | `enum` only | `|`-separated enumeration values. |
+| `extensions` | `file` only | `|`-separated filename extensions suggested to a file picker. |
 | `rows` | list-like fields only | Preferred number of visible rows. |
 
 ## 5. Field paths and ownership
@@ -135,6 +138,7 @@ Format 1 defines these field types:
 | `integer` | integer | integer input |
 | `number` | integer or floating-point number | numeric input |
 | `string` | string | single-line text input |
+| `file` | empty string or Rime-data-relative file path | file picker |
 | `enum` | string | select or combo box |
 | `list` | ordered list of strings | ordered list editor |
 | `key_binding_list` | `key_binder/bindings` list | Rime key-binding editor |
@@ -172,6 +176,48 @@ Exponent notation, `NaN`, and infinities are not supported. Bounds are inclusive
 
 The effective value is a string. `default` MAY be empty. Because INI values are trimmed, format 1 cannot express a
 default whose leading or trailing whitespace is significant.
+
+#### `file`
+
+The effective value is a string. An empty string means that no file is selected. A non-empty value identifies a file
+by relative path in the host's Rime data namespace and MUST use this normalized lexical form:
+
+- `/` is the only path separator;
+- the value MUST NOT begin or end with `/`;
+- every path segment MUST be non-empty and MUST NOT be `.` or `..`;
+- the value MUST NOT contain `\`, `:`, NUL, CR, or LF;
+- the value MUST NOT be an absolute, drive-qualified, drive-relative, UNC, or device path.
+
+Consumers MUST treat the value literally. They MUST NOT expand environment variables, `~`, URI schemes, or other
+host-specific path syntax. Containment is lexical: consumers are not required to resolve symbolic links, junctions,
+or reparse points when validating the value. The component that ultimately opens the file is responsible for deciding
+whether a resolved target is acceptable and usable.
+
+To resolve a non-empty value, the host MUST look for the relative path under the user data directory first and then the
+shared data directory. The first candidate that exists and is not a directory is the resolved file. A host without an
+available shared data directory treats that fallback as absent. If neither candidate meets those conditions, the value
+is unresolved; this does not make the manifest or field value invalid. A referenced file MAY therefore be absent,
+inaccessible, or unsuitable for its eventual use, and the component that consumes it MUST handle those conditions.
+
+A consumer MUST accept an interactive file selection only when the selected file is under the user data directory.
+The shared data directory is a read fallback, not an accepted selection root. An existing effective value or `default`
+that resolves from the shared data directory remains valid and MUST be presented normally. Whenever a consumer writes
+an edited value, it MUST write an empty string or the normalized relative path; it MUST NOT write either data-directory
+prefix.
+
+`default` is optional and MAY be empty. A non-empty default MUST obey the same relative-path rules. As with other field
+types, a default is only a read fallback and is not automatically written to the customization layer.
+
+`extensions` is optional. It is split at `|`; every item is trimmed and MUST match:
+
+```text
+[A-Za-z0-9][A-Za-z0-9_+-]*(?:\.[A-Za-z0-9][A-Za-z0-9_+-]*)*
+```
+
+Items omit the leading dot, and comparison for uniqueness is ASCII case-insensitive. Thus `ico|png` and `tar.gz` are
+valid, while `.ico`, an empty item, and `png|PNG` are invalid. A consumer MAY use the list to filter or prioritize files
+in its picker. The list is only a presentation hint: a consumer MUST NOT reject a current value, default, or user
+selection merely because its extension is absent from the list.
 
 #### `enum`
 
@@ -283,8 +329,8 @@ a list removes its exact override and its `+`, `-`, and ordered `@...` patch ope
 When a path is absent from the effective configuration, a consumer uses `default` if the field type supports it. If the
 path is absent and no default exists, the field cannot be loaded and the host SHOULD report a configuration error.
 
-Format 1 supports defaults for `boolean`, `integer`, `number`, `string`, `enum`, and an empty `list`. A producer MUST
-NOT specify `default` for the specialized complex types.
+Format 1 supports defaults for `boolean`, `integer`, `number`, `string`, `file`, `enum`, and an empty `list`. A producer
+MUST NOT specify `default` for the specialized complex types.
 
 ### 7.2 `rows`
 
@@ -308,6 +354,11 @@ For librime hosts, the recommended target is `<schema_id>.custom.yaml` under `pa
 SHOULD remove obsolete exact, nested, append, remove, and ordered patch operations owned by that field before writing
 the complete replacement.
 
+Consumers MUST offer restore for `list`, `key_binding_list`, `punctuator_map`, `recognizer_patterns`, and `switch_list`
+fields because editing replaces a complete list or map and would otherwise keep later upstream additions from taking
+effect. For `engine_lists`, consumers MUST offer restore independently for each of the four represented lists. Scalar
+fields, including `file`, own only their exact values and do not require a restore action.
+
 Restore is a staged user action: it takes effect when changes are saved. A restore MUST remove only the override and
 patch operations owned by the selected field or engine sub-list.
 
@@ -321,7 +372,9 @@ For forward compatibility, consumers SHOULD ignore unknown sections and unknown 
 Consumers MUST reject an unsupported `format` value and an unknown field `type` because their value semantics are not
 defined.
 
-Manifests are data, not code. Consumers MUST NOT evaluate property values as commands, expressions, or filesystem paths.
+Manifests are data, not code. Consumers MUST NOT evaluate property values as commands or expressions. A `file` value
+MAY be resolved as a filesystem path only according to section 6.1; no other property value may be treated as a
+filesystem path merely because it resembles one.
 
 ## 10. Rabbit format-1 compatibility profile
 
@@ -340,4 +393,5 @@ The first existing file is authoritative; manifests are not merged. Rabbit accep
 The filename and discovery rules are a host profile, not part of the core INI syntax. Other applications MAY use a
 different suffix or discovery mechanism while consuming the same manifest contents.
 
-Rabbit's original format-1 implementation is the compatibility reference for this draft. See [PROVENANCE.md](PROVENANCE.md).
+Rabbit's original format-1 implementation is the compatibility reference for this draft. See
+[PROVENANCE.md](PROVENANCE.md).

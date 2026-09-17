@@ -14,11 +14,11 @@ Rime 配置路径、控件语义、分组和显示文本；它不包含用户的
 ## What the format describes
 
 - ordered pages or groups;
-- scalar fields: `boolean`, `integer`, `number`, `string`, and `enum`;
+- scalar fields: `boolean`, `integer`, `number`, `string`, `file`, and `enum`;
 - ordered string lists and Rime key bindings;
 - Rime punctuation maps and recognizer patterns;
 - Rime switches and the four engine component lists;
-- optional defaults, numeric bounds, descriptions, and list row hints.
+- optional defaults, numeric bounds, descriptions, file-extension hints, and list row hints.
 
 The normative definition is [SPEC.md](SPEC.md). The specification deliberately defines the INI format itself; it does
 not require JSON or any other intermediate representation.
@@ -47,8 +47,9 @@ default = true
 ## Versioning
 
 The value of `[meta] format` is the format's compatibility boundary. This repository currently specifies only
-`format = 1`. Additive clarifications that do not change accepted documents may be published without changing the
-format number. Incompatible syntax or semantics require a new format number.
+`format = 1`. While format 1 remains a draft, its accepted syntax and semantics may evolve together with the Rabbit
+reference implementation. After format 1 is declared stable, incompatible syntax or semantics will require a new
+format number.
 
 ## License
 
